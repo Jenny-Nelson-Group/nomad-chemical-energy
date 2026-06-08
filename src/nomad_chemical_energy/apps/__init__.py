@@ -3,12 +3,26 @@ from nomad.config.models.plugins import AppEntryPoint
 from nomad_chemical_energy.apps.amcc_reproducibility_app import amcc_reproducibility_app
 from nomad_chemical_energy.apps.catlab_combinatorial_app import catlab_combinatorial_app
 from nomad_chemical_energy.apps.catlab_pixel_app import catlab_pixel_app
+from nomad_chemical_energy.apps.documentation_tools_app import documentation_tools_app
+from nomad_chemical_energy.apps.eln_app import eln_app
 from nomad_chemical_energy.apps.necc_compare_app import necc_compare_app
 from nomad_chemical_energy.apps.necc_find_app import necc_find_experiments_app
 from nomad_chemical_energy.apps.nesd_oer_app import nesd_oer_app
 from nomad_chemical_energy.apps.nome_oer_cp_app import nome_oer_cp_app
 from nomad_chemical_energy.apps.nome_sample_app import nome_sample_app
 from nomad_chemical_energy.apps.voila_finder_app import voila_finder_app
+
+documentation_tools_app = AppEntryPoint(
+    name='docutools',
+    description='Search and find your documentation tools.',
+    app=documentation_tools_app,
+)
+
+eln_app = AppEntryPoint(
+    name='eln',
+    description='Search your experimental data',
+    app=eln_app,
+)
 
 voila_finder_app = AppEntryPoint(
     name='voila',
