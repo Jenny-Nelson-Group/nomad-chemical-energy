@@ -197,7 +197,7 @@ class GamryParser(MatchingParser):
         setup_ref = find_sample_by_id(archive, setup_id)
 
         label = metadata.get('TITLE', '')
-        if 'OER CP' in label:
+        if 'OER CP' in label or 'HER CP' in label:
             file_name = 'oer_cp_analysis.archive.json'
             create_archive(CE_NOME_CPAnalysis(name=nickname), archive, file_name)
 
@@ -238,6 +238,8 @@ class GamryParser(MatchingParser):
             name_replaced = name.replace('#', 'run')
             if label == 'OER CP':
                 measurement.method = 'OER Chronopotentiometry'
+            elif label == 'HER CP':
+                measurement.method = 'HER Chronopotentiometry'
             create_archive(measurement, archive, name_replaced)
             refs.append(get_reference(archive.metadata.upload_id, eid))
 
