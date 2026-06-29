@@ -31,6 +31,7 @@ from baseclasses.chemical_energy import (
     ElectrolyserPerformanceEvaluation,
     ElectrolyserProperties,
     Environment,
+    Equipment,
     GalvanodynamicSweep,
     LinearSweepVoltammetry,
     NESDElectrode,
@@ -190,6 +191,15 @@ class CE_NESD_Setup(ElectroChemicalSetup, EntryData):
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
+
+
+class CE_NESD_Equipment(Equipment, EntryData):
+    m_def = Section(
+        a_eln=dict(
+            hide=['users', 'origin', 'elemental_composition', 'components'],
+            properties=dict(order=['name', 'lab_id', 'producer', 'location']),
+        )
+    )
 
 
 # %% ####################### Generic Entries

@@ -28,6 +28,8 @@ from baseclasses.chemical_energy import (
     SubstanceWithConcentration,
     SubstrateProperties,
 )
+from baseclasses.chemical_energy.cesample import Deposition, Solvent
+from baseclasses.helper.utilities import find_sample_by_id
 from nomad.datamodel.metainfo.basesections import (
     PureSubstanceComponent,
     PureSubstanceSection,
@@ -52,19 +54,15 @@ def split_catalyst_mxene_materials(material_str):
     return materials
 
 
-def map_sample(entry, data_dict, logger):
-    entry.name = data_dict.get('Active Material Common Name ')
-    entry.active_area = data_dict.get('Working Electrode: active area') * ureg('cm²')
+def map_sample(entry, data_dict, setup_type, logger):
+    entry.name = data_dict.get('active material common name')
+    entry.preparation_date = data_dict.get('preparation date')
+    entry.origin = data_dict.get('preparing person')
 
-    entry.preparation_date = data_dict.get('Preparation Date')
-    entry.origin = data_dict.get('Preparating Person')
-
-    materials = split_catalyst_mxene_materials(
-        data_dict.get('Active Material Common Name ')
-    )
+    materials = split_catalyst_mxene_materials(data_dict.get('solutes'))
     if len(materials) > 2 or not materials:
         logger.warn(
-            'Could not split given material into catalyst and mxene. Please check your "Active Material Common Name" in the metadata excel.'
+            'Could not split given material into catalyst and mxene. Please check your "Solutes" in the metadata excel.'
         )
     material_catalyst, material_mxene = (materials + [None, None])[:2]
     component_catalyst = PureSubstanceComponent(
@@ -73,8 +71,8 @@ def map_sample(entry, data_dict, logger):
     component_mxene = PureSubstanceComponent(
         pure_substance=PureSubstanceSection(molecular_formula=material_mxene)
     )
-    if data_dict.get('Mass Catalyst'):
-        component_catalyst.mass = (data_dict.get('Mass Catalyst', 0) * ureg('µg'),)
+    if data_dict.get('solute masses'):
+        component_catalyst.mass = (data_dict.get('solute masses', 0) * ureg('mg'),)
     if data_dict.get('Mass Mxene'):
         component_mxene.mass = data_dict.get('Mass Mxene', 0) * ureg('µg')
     components = []
@@ -84,41 +82,83 @@ def map_sample(entry, data_dict, logger):
         components.append(component_mxene)
     entry.components = components
 
-    entry.drying_temperature = data_dict.get('Drying temperature')
-    entry.description = data_dict.get('Notes')
+    entry.drying_temperature = data_dict.get('drying temperature')
+    entry.description = data_dict.get('notes (electrode preparation)')
 
-    entry.substrate = SubstrateProperties(
-        substrate_type=data_dict.get('Substrate type'),
-        substrate_cleaning=data_dict.get('Substrate Cleaning'),
-    )
+    if setup_type in ['3electrode', 'RDE', 'Half-Cell', 'old_template']:
+        entry.substrate = SubstrateProperties(
+            substrate_type=data_dict.get('substrate type'),
+            substrate_cleaning=data_dict.get('substrate cleaning'),
+        )
+
+    if setup_type in ['3electrode', 'RDE', 'old_template']:
+        entry.active_area = data_dict.get('working electrode: active area') * ureg(
+            'cm^2'
+        )
+        ink_composition_list = []
+        ink_list = [
+            solvent.strip()
+            for solvent in data_dict.get('ink composition', '').split(',')
+            if solvent.strip()
+        ]
+        pattern = re.compile(r'([\d.]+)\s*(ml|mL)\s*(.+)', re.IGNORECASE)
+        for solvent in ink_list:
+            m = pattern.match(solvent)
+            if not m:
+                logger.warn(
+                    'Could not split given ink composition into Solvent name + volume.'
+                    'Please check your "Ink Composition" field in the metadata excel.'
+                )
+                continue
+            volume = float(m.group(1))
+            unit = m.group(2).strip()
+            solvent_type = m.group(3).strip()
+            ink_composition_list.append(
+                Solvent(type=solvent_type, volume=volume * ureg(unit))
+            )
+        deposition_volume = data_dict.get('deposition volume')
+        catalyst_loading = data_dict.get('catalyst loading')
+        mass = data_dict.get('total mass of hybrid catalyst on electrode after drying')
+        deposition_notes = data_dict.get('notes (deposition method)', '')
+        entry.deposition = Deposition(
+            catalyst_layer_deposition_method=data_dict.get(
+                'catalyst layer deposition method'
+            ),
+            ink_composition=ink_composition_list,
+            deposition_volume=deposition_volume * ureg('µl')
+            if deposition_volume is not None
+            else None,
+            catalyst_loading=catalyst_loading * ureg('mg/cm^2')
+            if catalyst_loading is not None
+            else None,
+            binder=data_dict.get('binder'),
+            description=(
+                f'Total mass of hybrid catalyst on electrode after drying: {mass}mg <br><br>'
+                if mass
+                else ''
+            )
+            + deposition_notes,
+        )
 
 
 def get_environment(data_dict):
     entry = CE_NESD_Electrolyte()
-    entry.solvent = PubChemPureSubstanceSectionCustom(
-        name=data_dict.get('Electrolyte: solvent'), load_data=False
-    )
+    entry.solvent = PubChemPureSubstanceSectionCustom(name='H20', load_data=False)
     entry.substances = [
         SubstanceWithConcentration(
-            name=data_dict.get('Electrolyte: substance'),
-            concentration_mmol_per_l=data_dict.get(
-                'Electrolyte: substance molar concentration'
-            ),
-            concentration_g_per_l=data_dict.get(
-                'Electrolyte: substance mass concentration'
-            ),
-            amount_relative=data_dict.get('Electrolyte: substance amount relative'),
+            name=data_dict.get('electrolyte: substance'),
+            concentration_mmol_per_l=data_dict.get('electrolyte: concentration'),
             substance=PubChemPureSubstanceSectionCustom(
-                name=data_dict.get('Electrolyte: substance'), load_data=False
+                name=data_dict.get('electrolyte: substance'), load_data=False
             ),
         )
     ]
-    entry.ph_value = data_dict.get('Electrolyte: pH')
+    entry.ph_value = data_dict.get('electrolyte: ph')
     entry.purging = Purging(
-        time=data_dict.get('Electrolyte: purging time'),
-        temperature=data_dict.get('Electrolyte: purging temperature'),
+        time=data_dict.get('electrolyte: purging time'),
+        temperature=data_dict.get('electrolyte: purging temperature'),
         gas=PubChemPureSubstanceSectionCustom(
-            name=data_dict.get('Electrolyte: purging gas'), load_data=False
+            name=data_dict.get('electrolyte: purging gas'), load_data=False
         ),
     )
     return entry
@@ -126,37 +166,32 @@ def get_environment(data_dict):
 
 def get_reference_electrode(data_dict):
     entry = CE_NESD_ReferenceElectrode()
-    entry.name = data_dict.get('Reference electrode: Type')
+    entry.name = data_dict.get('reference electrode: type')
     entry.standard_potential = data_dict.get(
-        'Reference electrode: Standard potential at 25 °C'
+        'reference electrode: standard potential at 25 °c'
     ) * ureg('V')
-    entry.temperature = data_dict.get('Reference electrode: Temperature')
-    entry.internal_solution = SubstanceWithConcentration(
-        name=data_dict.get('Reference electrode: Type'),
-        concentration_mmol_per_l=data_dict.get(
-            'Reference electrode: Internal solution concentration'
-        ),
-        substance=PubChemPureSubstanceSectionCustom(
-            name=data_dict.get('Reference electrode: Internal solution substance'),
-            load_data=False,
-        ),
-    )
+    entry.temperature = data_dict.get('reference electrode: temperature')
     return entry
 
 
-def map_setup(entry, data_dict):
-    entry.origin = data_dict.get('Experimentalist: Name')
-    if data_dict.get('Measurement Date'):
-        entry.datetime = data_dict.get('Measurement Date')
+def map_setup(entry, data_dict, setup_type, archive):
+    entry.setup = setup_type
+    entry.origin = data_dict.get('experimentalist: name')
+    if data_dict.get('measurement date'):
+        entry.datetime = data_dict.get('measurement date')
 
-    entry.environment = get_environment(data_dict)
+    potentiostat = find_sample_by_id(archive, data_dict.get('potentiostat model'))
+    entry.equipment = [potentiostat] if potentiostat is not None else None
+    entry.description = data_dict.get('general information and notes')
+
+    if setup_type != 'AEM_or_PEM':
+        entry.environment = get_environment(data_dict)
     entry.ir_compensation = (
-        data_dict.get('iR compensation') / 100
-        if data_dict.get('iR compensation') is not None
+        data_dict.get('ir compensation') / 100
+        if data_dict.get('ir compensation') is not None
         else None
     )
 
-    entry.setup = data_dict.get('Electrode configuration')
     # TODO revisit when reference electrodes in the lab get ids (then link ref and counter electrodes here)
     # entry.reference_electrode_subsection = get_reference_electrode(data_dict)
     # data_dict.get('Counter electrode: Material')
