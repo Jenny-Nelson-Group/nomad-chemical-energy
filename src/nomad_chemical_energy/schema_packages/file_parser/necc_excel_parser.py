@@ -37,10 +37,10 @@ from baseclasses.chemical_energy import (
     PotentiometryGasChromatographyResults,
     SubstrateProperties,
 )
+from baseclasses.chemical_energy.cesample import Solvent
 from baseclasses.chemical_energy.neccelectrode import (
     CENECCElectrodeRecipeID,
     Ionomer,
-    Solvent,
 )
 from baseclasses.helper.utilities import get_reference, search_entry_by_id
 from nomad.datamodel.metainfo.basesections import CompositeSystemReference
