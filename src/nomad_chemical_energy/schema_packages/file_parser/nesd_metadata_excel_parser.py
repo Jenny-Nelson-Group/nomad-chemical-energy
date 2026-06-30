@@ -98,7 +98,7 @@ def map_sample(entry, data_dict, setup_type, logger):
         ink_composition_list = []
         ink_list = [
             solvent.strip()
-            for solvent in data_dict.get('ink composition', '').split(',')
+            for solvent in data_dict.get('solvent volumes', '').split(',')
             if solvent.strip()
         ]
         pattern = re.compile(r'([\d.]+)\s*(ml|mL)\s*(.+)', re.IGNORECASE)
@@ -107,7 +107,7 @@ def map_sample(entry, data_dict, setup_type, logger):
             if not m:
                 logger.warn(
                     'Could not split given ink composition into Solvent name + volume.'
-                    'Please check your "Ink Composition" field in the metadata excel.'
+                    'Please check your "Solvent Volumes" field in the top part of the metadata excel.'
                 )
                 continue
             volume = float(m.group(1))
