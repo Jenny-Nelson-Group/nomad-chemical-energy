@@ -156,7 +156,7 @@ class CENESDBioLogicParser(MatchingParser):
         with open(filename, 'rb') as f:
             metadata, _ = get_header_and_data(f)
         device_number = metadata.get('log', {}).get('device_sn')
-        if device_number in ['1581', '1659']:
+        if device_number in ['1581', '1659', '.006311']:
             return True
         return False
 
