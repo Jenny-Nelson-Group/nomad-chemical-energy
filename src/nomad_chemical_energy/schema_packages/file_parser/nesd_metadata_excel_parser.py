@@ -98,7 +98,7 @@ def map_sample(entry, data_dict, setup_type, logger):
         ink_composition_list = []
         ink_list = [
             solvent.strip()
-            for solvent in data_dict.get('solvent volumes', '').split(',')
+            for solvent in (data_dict.get('solvent volumes', '') or '').split(',')
             if solvent.strip()
         ]
         pattern = re.compile(r'([\d.]+)\s*(ml|mL)\s*(.+)', re.IGNORECASE)
