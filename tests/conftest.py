@@ -30,6 +30,10 @@ def set_monkey_patch(monkeypatch):
         mockreturn_search,
     )
     monkeypatch.setattr(
+        'nomad_chemical_energy.schema_packages.file_parser.nesd_metadata_excel_parser.find_sample_by_id',
+        mockreturn_search,
+    )
+    monkeypatch.setattr(
         'nomad_chemical_energy.parsers.ce_nesd_parser.set_sample_reference',
         mockreturn_search,
     )

@@ -156,7 +156,7 @@ class CENESDBioLogicParser(MatchingParser):
         with open(filename, 'rb') as f:
             metadata, _ = get_header_and_data(f)
         device_number = metadata.get('log', {}).get('device_sn')
-        if device_number in ['1581', '1659']:
+        if device_number in ['1581', '1659', '.006311']:
             return True
         return False
 
@@ -366,11 +366,76 @@ class CENESDMetadataExcelParser(MatchingParser):
     def to_float_if_possible(self, value):
         if pd.isna(value):
             return None
-        value_str = str(value).replace(',', '.')
         try:
+            value_str = str(value).replace(',', '.')
             return float(value_str)
         except ValueError:
-            return value_str
+            return value
+
+    def split_experimental_techniques(self, df, logger):
+        markers = {
+            '3electrode': 'For 3 Electrode Setup:',
+            'RDE': 'For RDE:',
+            'AEM_or_PEM': 'For AEM or PEM:',
+            'Half-Cell': 'For Half-Cell:',
+        }
+
+        field = df['Field'].fillna('').astype(str).str.strip()
+
+        marker_idx = {}
+
+        for name, marker in markers.items():
+            matches = field.eq(marker.lower())
+            if not matches.any():
+                logger.warn(
+                    f'Marker not found: {marker}. Please check for newer metadata excel template.'
+                )
+                # if one of the markers is missing we treat the excel like the old metadata template
+                return df, 'old_template', pd.DataFrame(columns=df.columns)
+            marker_idx[name] = matches.idxmax()
+
+        technique_names = ['general', *markers.keys()]
+
+        starts = [
+            0,
+            *(marker_idx[name] + 1 for name in markers),
+        ]
+
+        ends = [
+            *(marker_idx[name] for name in markers),
+            len(df),
+        ]
+
+        experimental_techniques = {
+            name: df.iloc[start:end]
+            for name, start, end in zip(
+                technique_names,
+                starts,
+                ends,
+            )
+        }
+
+        filled_counts = {
+            name: (technique['Value'].fillna('').astype(str).str.strip().ne('').sum())
+            for name, technique in experimental_techniques.items()
+            if name != 'general'
+        }
+
+        non_empty = {name: count for name, count in filled_counts.items() if count > 0}
+
+        if not non_empty:
+            active_name = None
+            active_df = None
+        else:
+            active_name = max(non_empty, key=non_empty.get)
+            active_df = experimental_techniques[active_name]
+
+            if len(non_empty) > 1:
+                logger.warn(
+                    f'Multiple experimental techniques contain values: {list(non_empty.keys())}',
+                )
+
+        return experimental_techniques['general'], active_name, active_df
 
     def parse(self, mainfile: str, archive: EntryArchive, logger):
         file = mainfile.rsplit('raw/', maxsplit=1)[-1]
@@ -391,19 +456,34 @@ class CENESDMetadataExcelParser(MatchingParser):
             xls_file = pd.ExcelFile(f)
             excel_data = pd.read_excel(xls_file, sheet_name='NESD Metadata')
             excel_data['Value'] = excel_data['Value'].apply(self.to_float_if_possible)
-            mapping = dict(zip(excel_data.loc[:, 'Field'], excel_data.loc[:, 'Value']))
-            map_setup(setup_entry, mapping)
-            map_sample(sample_entry, mapping, logger)
+            excel_data['Field'] = excel_data['Field'].str.lower().str.strip()
+            general_df, setup_type, setup_df = self.split_experimental_techniques(
+                excel_data, logger
+            )
+            mapping_df = pd.concat(
+                [general_df, setup_df],
+                ignore_index=True,
+            ).dropna(subset=['Field'])
 
-        ref_electrode_file_name = f'{file}_reference_electrode.archive.json'
-        reference_electrode_entry = get_reference_electrode(mapping)
-        create_archive(reference_electrode_entry, archive, ref_electrode_file_name)
-        ref_electrode_entry_id = get_entry_id_from_file_name(
-            ref_electrode_file_name, archive
+        mapping = dict(
+            zip(
+                mapping_df['Field'],
+                mapping_df['Value'],
+            )
         )
-        setup_entry.reference_electrode = get_reference(
-            archive.metadata.upload_id, ref_electrode_entry_id
-        )
+        map_setup(setup_entry, mapping, setup_type, archive)
+        map_sample(sample_entry, mapping, setup_type, logger)
+
+        if setup_type in ['3electrode', 'RDE', 'old_template']:
+            ref_electrode_file_name = f'{file}_reference_electrode.archive.json'
+            reference_electrode_entry = get_reference_electrode(mapping)
+            create_archive(reference_electrode_entry, archive, ref_electrode_file_name)
+            ref_electrode_entry_id = get_entry_id_from_file_name(
+                ref_electrode_file_name, archive
+            )
+            setup_entry.reference_electrode = get_reference(
+                archive.metadata.upload_id, ref_electrode_entry_id
+            )
 
         setup_file_name = f'{file}_setup.archive.json'
         create_archive(setup_entry, archive, setup_file_name)
@@ -421,7 +501,7 @@ class CENESDMetadataExcelParser(MatchingParser):
         )
         archive.metadata.entry_name = file
 
-        if mapping.get('Reaction type') == 'OER':
+        if mapping.get('reaction type') == 'OER':
             analysis_name = f'{folder_path}/oer_analysis'[1:]
             analysis_file_name = f'{analysis_name}.archive.json'
             create_archive(
