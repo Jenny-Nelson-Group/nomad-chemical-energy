@@ -30,7 +30,7 @@ maintainers = [
 license = { file = "LICENSE" }
 dependencies = [
     "nomad-lab>=1.4.1",
-    'nomad-baseclasses @ git+https://github.com/nomad-hzb/nomad-baseclasses.git',
+    'nomad-baseclasses @ git+https://github.com/Jenny-Nelson-Group/nomad-baseclasses.git@94afad52d1d3632aaf1fc6d443d46eb6e4df0438',
     'nomad-measurements',
     'nomad-material-processing',
     'httpx==0.27.2',
